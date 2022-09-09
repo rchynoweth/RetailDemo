@@ -1,22 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Real-time Order Fulfillment 
-# MAGIC 
-# MAGIC Current: 
-# MAGIC - Simulates, ingests, and processes transactional data 
-# MAGIC - Process and fulfills orders 
-# MAGIC - Notifies customers at multiple touchpoints 
-# MAGIC 
-# MAGIC Future: 
-# MAGIC - Substitutions 
-# MAGIC 1. Pickup timeslots 
-# MAGIC 1. Basket creation (adding/removing items from cart). This could potentially be used to predict out of stock items. 
-# MAGIC 1. Tables to prioritize picking i.e. focus on the near term pick up orders 
-# MAGIC 
-# MAGIC 
-# MAGIC 
-# MAGIC 
-# MAGIC <img src="https://racadlsgen2.blob.core.windows.net/public/RCGDemosDiagrams.png" width = 1200/>
 
 # COMMAND ----------
 
