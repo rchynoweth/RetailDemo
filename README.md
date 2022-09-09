@@ -9,9 +9,9 @@ Current:
 
 Future: 
 - Substitutions 
-1. Pickup timeslots 
-1. Basket creation (adding/removing items from cart). This could potentially be used to predict out of stock items. 
-1. Tables to prioritize picking i.e. focus on the near term pick up orders 
+- Pickup timeslots 
+- Basket creation (adding/removing items from cart). This could potentially be used to predict out of stock items. 
+- Tables to prioritize picking i.e. focus on the near term pick up orders 
 
 
 
