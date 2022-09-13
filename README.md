@@ -6,18 +6,26 @@ Current:
 - Simulates, ingests, and processes transactional data 
 - Process and fulfills orders 
 - Notifies customers at multiple touchpoints 
+- Tracks cart creation i.e. viewing/adding/removing items from cart   
+
 
 Future: 
 - Substitutions 
 - Pickup timeslots 
-- Basket creation (adding/removing items from cart). This could potentially be used to predict out of stock items. 
 - Tables to prioritize picking i.e. focus on the near term pick up orders 
-
+- ML Model for product/promotion recommendations
 
 
 
 <img src="https://racadlsgen2.blob.core.windows.net/public/RCGDemosDiagrams.png" width = 1200/>
 
+
+### Running the Repo
+1. Run GenerateData to populate the initial dataset  
+  - If you do not want to recreate the initial dataset and start where you left off then just run the last two commands to continue generating order data 
+  - This notebook behaves as the 'customer'   
+1. Create and Run the DLT Pipeline to populate analytics datasets
+1. Run the OrderOperationalPipeline to run the operations (i.e. order creation and fulfillment )
 
 
 ### Resources:

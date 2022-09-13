@@ -79,7 +79,7 @@ dbutils.fs.mkdirs(ops_ckpts)
 # MAGIC 
 # MAGIC 
 # MAGIC 
-# MAGIC 
+# MAGIC **Please note that following:**  
 # MAGIC Output Modes: 
 # MAGIC - Complete Mode - The entire updated Result Table will be written to the external storage. It is up to the storage connector to decide how to handle writing of the entire table.  
 # MAGIC - Append Mode (default) - Only the new rows appended in the Result Table since the last trigger will be written to the external storage. This is applicable only on the queries where existing rows in the Result Table are not expected to change. 
@@ -133,12 +133,23 @@ store_address_df = (spark.readStream
                .load("{}/store_address/*.json".format(raw_files))
               )
 
+order_actions_df = (spark.readStream
+               .format("cloudFiles")
+               .option("cloudFiles.format", "json")
+               .option("cloudFiles.schemaLocation", raw_schemas+"/order_actions")
+               .load("{}/order_actions/*.json".format(raw_files))
+              )
+
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Ingesting the Operational Data as Streams
 
 # COMMAND ----------
+
+####
+# Write all incoming JSON data as delta tables - append only mode (i.e. not updates/deletes on these tables)
+####
 
 (customer_df.select("*", input_file_name().alias("source_file"))
   .writeStream
@@ -176,8 +187,20 @@ store_address_df = (spark.readStream
   .toTable("ops_store_address")
 )
 
+
+(order_actions_df.select("*", input_file_name().alias("source_file"))
+  .writeStream
+  .option("checkpointLocation", raw_ckpts+"/order_actions")
+  .toTable("order_actions")
+)
+
+
 # COMMAND ----------
 
+####
+# Define the basket schema  
+# {'basket': [{'product_id': 'x', 'qty': y, 'total': z}, {'product_id': 'x', 'qty': y, 'total': z}, ...]}
+####
 basket_schema = ArrayType(StructType([
   StructField("product_id", StringType()),
   StructField("qty", LongType()),
@@ -185,6 +208,13 @@ basket_schema = ArrayType(StructType([
   ])
 )
 
+# COMMAND ----------
+
+####
+# Create the ops_orders_main
+# - this table will be a working table to track and process orders submitted by customers 
+# - updates, deletes, inserts are allowed
+####
 
 spark.sql(
   """ CREATE TABLE IF NOT EXISTS ops_orders_main (
@@ -204,6 +234,9 @@ spark.sql(
 
 # COMMAND ----------
 
+#### 
+# Read the append only data as a stream and write to the operational table defined above
+####
 ops_orders_df = spark.readStream.table("ops_order")
 
 # COMMAND ----------
@@ -229,7 +262,8 @@ ops_orders_df = spark.readStream.table("ops_order")
 
 # COMMAND ----------
 
-# ops_quarantine_orders 
+## ops_quarantine_orders 
+# - all orders data that does not fit the defined schema 
 (
   ops_orders_df.filter(col("_rescued_data").isNotNull())
   .writeStream
@@ -238,13 +272,15 @@ ops_orders_df = spark.readStream.table("ops_order")
 )
 
 
-# ops_order_line_items
+## ops_order_line_items
+# - each item in the order is a row in this table 
+# - unique key is order_id and product_id
 (
   ops_orders_df.filter(col("_rescued_data").isNull())
   .withColumn("value", from_json(col("basket"), basket_schema))
   .withColumn("attr", explode("value"))
   .withColumn("filled", lit(False))
-#   .withColumn("order_filled", lit(False))
+#   .withColumn("order_filled", lit(False)) # potentially use to filter the read on the merge
   .withColumn("modified_datetime", current_timestamp())
   .withColumn("created_datetime", current_timestamp())
   .select("customer_id", "order_id", "store_id", "attr.product_id", "attr.qty", "attr.total", "filled", "modified_datetime", "created_datetime")
@@ -260,8 +296,11 @@ ops_orders_df = spark.readStream.table("ops_order")
 
 # COMMAND ----------
 
+## Foreach batch function
+# used to insert data that results in a customer notification 
+# The merge makes sure we do not insert duplicate records 
 def merge_customer_notifications(microBatchDF, batchId):
-  
+  microBatchDF = microBatchDF.withColumn("batchId", lit(batchId))
   mytable = DeltaTable.forName(spark, 'ops_customer_notifications')
   
   (
@@ -274,8 +313,8 @@ def merge_customer_notifications(microBatchDF, batchId):
 
 # COMMAND ----------
 
-
-# ops_customer_notifications
+## ops_customer_notifications
+# writes a notification message when an order is filled 
 (
   spark.readStream
   .option('ignoreChanges', True)
@@ -296,8 +335,10 @@ def merge_customer_notifications(microBatchDF, batchId):
 
 # COMMAND ----------
 
+## foreach batch merge function 
+# used to update an order status when one or many items are filled in an order 
 def merge_order_status(microBatchDF, batchId):
-  
+  microBatchDF = microBatchDF.withColumn("batchId", lit(batchId))
   mytable = DeltaTable.forName(spark, 'ops_orders_main')
   
   (
@@ -314,6 +355,10 @@ def merge_order_status(microBatchDF, batchId):
   )
 
 # COMMAND ----------
+
+## Updates ops_order_main with the number of line items that have been filled
+# - maintains order state/status
+# - when implemented `order_filled` can be used to filter the line items and reduce the size 
 
 (
   spark.readStream
@@ -337,38 +382,89 @@ def merge_order_status(microBatchDF, batchId):
 # MAGIC ### Completed Orders Tables
 # MAGIC 
 # MAGIC `ops_pickup_completed_orders` and `ops_delivery_completed_orders`
+# MAGIC 
+# MAGIC 
+# MAGIC Please notice the `txnVersion` and `txnAppId` used to ensure that we do not write duplicates and the `.cache()` to avoid scanning the data twice for both streams. 
 
 # COMMAND ----------
 
-# ops_pickup_completed_orders 
+## foreach batch merge function 
+# used to update an order status when one or many items are filled in an order 
+def write_completed_order(microBatchDF, batchId):
+  microBatchDF.cache() # Scan data only once 
+  
+  df = microBatchDF.withColumn("batchId", lit(batchId))
+  
+  app_id = '8080'
+  
+  (df.filter(col("order_type") == "pickup")
+   .write
+   .option("txnVersion", batchId)
+   .option("txnAppId", app_id)
+   .mode("append")
+   .saveAsTable('ops_pickup_completed_orders')
+  )
+  
+  (df.filter(col("order_type") == "delivery")
+   .write
+   .option("txnVersion", batchId)
+   .option("txnAppId", app_id)
+   .mode("append")
+   .saveAsTable('ops_delivery_completed_orders')
+  )
+  
+  df.unpersist()
+  
+# Write to both the pickup and delivery completed orders table 
 (
-  spark.readStream.option('ignoreChanges', True)
-  .table("ops_orders_main")
-  .filter(col("filled") == True)
-  .filter(col("order_type") == "pickup")
+  spark.readStream
+  .option('ignoreChanges', True)
+  .table('ops_orders_main')
+  .filter(col('filled') == True)
   .withColumn("transaction_completed", lit(False))
   .writeStream
-  .option("checkpointLocation", ops_ckpts+"/ops_pickup_completed_orders")
-  .toTable('ops_pickup_completed_orders')
+  .option("checkpointLocation", ops_ckpts+"/ops_completed_orders")
+  .foreachBatch(write_completed_order)
+  .start()
 )
 
 
-# ops_delivery_completed_orders
-(
-  spark.readStream.option('ignoreChanges', True)
-  .table("ops_orders_main")
-  .filter(col("filled") == True)
-  .filter(col("order_type") == "delivery")
-  .withColumn("transaction_completed", lit(False))
-  .writeStream
-  .option("checkpointLocation", ops_ckpts+"/ops_delivery_completed_orders")
-  .toTable('ops_delivery_completed_orders')
-)
+
+#### Original 
+
+# ## ops_pickup_completed_orders 
+# # - route completed pickup orders to a table
+# (
+#   spark.readStream.option('ignoreChanges', True)
+#   .table("ops_orders_main")
+#   .filter(col("filled") == True)
+#   .filter(col("order_type") == "pickup")
+#   .withColumn("transaction_completed", lit(False))
+#   .writeStream
+#   .option("checkpointLocation", ops_ckpts+"/ops_pickup_completed_orders")
+#   .toTable('ops_pickup_completed_orders')
+# )
+
+
+# ## ops_delivery_completed_orders
+# # - route completed delivery orders to a table 
+# (
+#   spark.readStream.option('ignoreChanges', True)
+#   .table("ops_orders_main")
+#   .filter(col("filled") == True)
+#   .filter(col("order_type") == "delivery")
+#   .withColumn("transaction_completed", lit(False))
+#   .writeStream
+#   .option("checkpointLocation", ops_ckpts+"/ops_delivery_completed_orders")
+#   .toTable('ops_delivery_completed_orders')
+# )
 
 # COMMAND ----------
 
 
-# ops_customer_notifications
+## ops_customer_notifications
+# - writes to customer notification table ("append only") when the order has been picked up by the customer
+# - receipt is sent to customer
 (
   spark.readStream
   .option('ignoreChanges', True)
@@ -383,7 +479,9 @@ def merge_order_status(microBatchDF, batchId):
 )
 
 
-# ops_customer_notifications
+## ops_customer_notifications
+# - writes a notification when the order has been delivered to the customer 
+# - receipt is sent to customer
 (
   spark.readStream
   .option('ignoreChanges', True)
@@ -401,6 +499,8 @@ def merge_order_status(microBatchDF, batchId):
 
 # MAGIC %md
 # MAGIC ## Simulate Data Processing 
+# MAGIC 
+# MAGIC i.e. the simulates human actions and work from the store employess. The generate data notebook simulates actions taken on behalf of the customer. 
 
 # COMMAND ----------
 
@@ -409,52 +509,58 @@ def merge_order_status(microBatchDF, batchId):
 
 # COMMAND ----------
 
-order_ids = [r.order_id for r in spark.read.table("ops_orders_main").filter(col('filled') == False).select("order_id").collect()]
-order_ids
-
-# COMMAND ----------
-
-def fulfill_order(order_ids):
+## function used to fulfill orders one at a time 
+# - when executed this function will run for 1 hour 
+# - all items in an order are filled at the same time
+def fulfill_order():
   end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
-  sleep_time = 1
   
   while datetime.datetime.utcnow() < end_time:
+    order_ids = [r.order_id for r in spark.read.table("ops_orders_main").filter(col('filled') == False).select("order_id").limit(40).collect()]
     oid = order_ids[random.randint(0,len(order_ids)-1)]
     spark.sql("UPDATE ops_order_line_items SET filled = True where order_id = '{}' ".format(oid))
-    time.sleep(sleep_time)
+
 
 # COMMAND ----------
 
 # execute thread
-x = threading.Thread(target=fulfill_order, args=(order_ids,))
+x = threading.Thread(target=fulfill_order)
 x.start()
 
 
 # COMMAND ----------
 
-order_ids = [(r.order_id, r.order_type) for r in spark.read.table("ops_orders_main").filter(col('filled') == False).select("order_id", "order_type").collect()]
-order_ids 
-
-# COMMAND ----------
-
-
-def complete_order(order_ids):
+## Function used to mark and order comlpeted to the customer 
+# - this is a delivery driver marking complete or a pickup employee putting bags into a car 
+def complete_order():
   end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
-  sleep_time = 1
   
   while datetime.datetime.utcnow() < end_time:
+    order_ids = oid = [(r.order_id, r.order_type) for r in  spark.sql("SELECT order_id, order_type FROM ops_orders_main WHERE filled = TRUE and transaction_completed = FALSE LIMIT 10").collect()]
     oid = order_ids[random.randint(0,len(order_ids)-1)]
     spark.sql("UPDATE ops_{}_completed_orders SET transaction_completed = True where order_id = '{}' ".format(oid[1], oid[0]))
     spark.sql("UPDATE ops_{}_completed_orders SET transaction_completed = True where order_id = '{}' ".format(oid[1], oid[0]))
 
-    time.sleep(sleep_time)
 
 # COMMAND ----------
 
+# execute thread
+y = threading.Thread(target=complete_order)
+y.start()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Observation
+
+# COMMAND ----------
+
+# DBTITLE 1,Watch orders being filled in real-time
 display(spark.readStream.option('ignoreChanges', True).table("ops_orders_main").filter(col("filled") == True))
 
 # COMMAND ----------
 
+# DBTITLE 1,Customers being notified of their order status
 display(spark.readStream.option('ignoreChanges', True).table("ops_customer_notifications"))
 
 # COMMAND ----------

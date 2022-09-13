@@ -20,7 +20,7 @@ random.rand
 
 # COMMAND ----------
 
-tables = ['customer', 'store', 'customer_address', 'store_address', 'order', 'product']
+tables = ['customer', 'store', 'customer_address', 'store_address', 'order', 'product', 'order_actions']
 
 # COMMAND ----------
 

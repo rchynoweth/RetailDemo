@@ -204,21 +204,25 @@ ca.start()
 
 # COMMAND ----------
 
-# DBTITLE 1,Order Creation
+# DBTITLE 1,Customer Behavior - Order Creation
 def create_orders(order, data_domain, products):
   end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
-  order_count = 10 # at sleep = 5 and cnt = 10 this produces an average of 2 files a second 
-  sleep_time = 2.5
+  order_count = 10 
+  sleep_time = 1
   
   while datetime.datetime.utcnow() < end_time:
     ## Update an Address
     for i in range(0, order_count):
       customer_id = data_domain.select_random_customer()
       store_id = data_domain.select_random_store()
-      d = order.create_order(customer_id, store_id, products)
+      d, a = order.create_order(customer_id, store_id, products)
       filename = "{}/order/order_{}.json".format(raw_files, str(uuid.uuid4()))
       with open(filename, "w") as f:
         json.dump(d, f)
+        
+      filename = "{}/order_actions/order_actions_{}.json".format(raw_files, str(uuid.uuid4()))
+      with open(filename, "w") as f:
+        json.dump(a, f)
 
     time.sleep(sleep_time)
 
