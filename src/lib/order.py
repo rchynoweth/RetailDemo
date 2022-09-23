@@ -1,6 +1,5 @@
 import random
 import uuid 
-from faker import Faker 
 import datetime
 import time 
 
@@ -8,7 +7,6 @@ import time
 class Order():
   
   def __init__(self):
-    self.fake = Faker()
     self.order_sources = ['web', 'ios', 'android']
     self.order_types = ['pickup', 'delivery']
   
@@ -30,7 +28,7 @@ class Order():
     """
     actions = ['viewed', 'added', 'removed']
     
-    basket_items, customer_actions = []
+    basket_items, customer_actions = [], []
     for i in range(1,random.randint(product_min,product_max)):
       qty = random.randint(qty_min, qty_max)
       product = products.get_random_product()
@@ -42,19 +40,19 @@ class Order():
       customer_actions.append(item)
       
       # ADD 
-      if random.rand() >= 0.10:
+      if random.random() >= 0.10:
         item['time'] = time.time()
         item['action'] = 'added'
         customer_actions.append(item)
         basket_items.append({k: item.get(k) for k in ['product_id', 'qty', 'total']})
         # REMOVE
-        if random.rand() > 0.98:
+        if random.random() > 0.98:
           _ = basket_items.pop() # remove basket item
           item['time'] = time.time()
           item['action'] = 'removed'
           customer_actions.append(item)
           # ADD again with new qty 
-          if random.rand() >= 0.60:
+          if random.random() >= 0.60:
             item['time'] = time.time()
             item['action'] = 'added'
             qty = random.randint(qty_min, qty_max)

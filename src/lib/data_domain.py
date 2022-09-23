@@ -16,7 +16,6 @@ class DataDomain():
   def __init__(self):
     self.store_ids = [] 
     self.customer_ids = []
-    self.products = None 
     
     
   def select_random_customer(self):
@@ -34,5 +33,3 @@ class DataDomain():
   def add_store(self, sid):
     self.store_ids.append(sid)  
     
-  def set_products(self, products):
-    self.products = products

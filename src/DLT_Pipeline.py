@@ -16,10 +16,6 @@ from pyspark.sql.types import *
 
 # COMMAND ----------
 
-random.rand
-
-# COMMAND ----------
-
 tables = ['customer', 'store', 'customer_address', 'store_address', 'order', 'product', 'order_actions']
 
 # COMMAND ----------
@@ -49,7 +45,7 @@ def generate_tables(table):
     return (
       spark.readStream.format('cloudfiles')
         .option('cloudFiles.format', 'json')
-        .load('/Users/{}/dynamic_dlt/raw/{}/{}_*.json'.format(user_name, table, table))
+        .load('/Users/{}/retail_demo/raw/{}/{}_*.json'.format(user_name, table, table))
         .withColumn('input_file', input_file_name())
         .withColumn("load_datetime", current_timestamp())
      )
@@ -63,15 +59,6 @@ for t in tables:
 
 # MAGIC %md
 # MAGIC ## Detail tables
-
-# COMMAND ----------
-
-def my_gold_table():
-  silver_one = dlt.read("silver_table_one")
-  silver_two = dlt.read("silver_table_two")
-  return ( 
-     silver_one.join(silver_two, silver_one.id == silver_two.id, how="inner")
-  )
 
 # COMMAND ----------
 
@@ -172,52 +159,30 @@ def monthly_sales():
 
 # COMMAND ----------
 
-# DBTITLE 1,SCD Type 1 
-# customer address
-dlt.create_streaming_live_table("customer_address_scd1")
-
-dlt.apply_changes(
-  target = "customer_address_scd1",
-  source = "customer_address", 
-  keys = ["customer_id"], 
-  sequence_by = col("created_date"),
-  stored_as_scd_type = 1
-)
-
-
-# store address 
-dlt.create_streaming_live_table("store_address_scd1")
-
-dlt.apply_changes(
-  target = "store_address_scd1",
-  source = "store_address", 
-  keys = ["store_id"], 
-  sequence_by = col("created_date"),
-  stored_as_scd_type = 1
-)
+# MAGIC %md
+# MAGIC ### Slowly Changing Dimension Tables
 
 # COMMAND ----------
 
-# DBTITLE 1,SCD Type 2 
-# customer address
-dlt.create_streaming_live_table("customer_address_scd2")
+### 
+# This creates append only tables for our bronze sources
+# we can do further modeling in silver/gold layers 
+###
+def generate_scd_tables(table, key, seq_col, scd_type):
+  dlt.create_streaming_live_table("{}_scd{}".format(table, scd_type))
+  dlt.apply_changes(
+      target = "{}_scd{}".format(table, scd_type),
+      source = table, 
+      keys = [key], 
+      sequence_by = col(seq_col),
+      stored_as_scd_type = scd_type
+    )
 
-dlt.apply_changes(
-  target = "customer_address_scd2",
-  source = "customer_address", 
-  keys = ["customer_id"], 
-  sequence_by = col("created_date"),
-  stored_as_scd_type = 2
-)
+# COMMAND ----------
 
-
-# store address
-dlt.create_streaming_live_table("store_address_scd2")
-
-dlt.apply_changes(
-  target = "store_address_scd2",
-  source = "store_address", 
-  keys = ["store_id"], 
-  sequence_by = col("created_date"),
-  stored_as_scd_type = 2
-)
+generate_scd_tables('store_address', 'address_id', 'created_date', 1)
+generate_scd_tables('store_address', 'address_id', 'created_date', 2)
+generate_scd_tables('customer_address', 'address_id', 'created_date', 1)
+generate_scd_tables('customer_address', 'address_id', 'created_date', 2)
+generate_scd_tables('order_actions', 'order_id', 'datetime', 1)
+generate_scd_tables('order_actions', 'order_id', 'datetime', 2)

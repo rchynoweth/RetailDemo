@@ -15,52 +15,19 @@ import threading
 # COMMAND ----------
 
 dbutils.widgets.text("schema_name", "")
-
-# COMMAND ----------
-
 schema_name = dbutils.widgets.get("schema_name")
-
-# COMMAND ----------
-
-spark.sql(f"USE {schema_name}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+spark.sql(f"USE {schema_name}"
 
 # COMMAND ----------
 
 user_name = spark.sql("SELECT current_user()").collect()[0][0]
 
-raw_files = "/Users/{}/dynamic_dlt/raw".format(user_name)
-raw_schemas = "/Users/{}/dynamic_dlt/raw_schemas".format(user_name)
-raw_ckpts = "/Users/{}/dynamic_dlt/raw_ckpts".format(user_name)
-ops_ckpts = "/Users/{}/dynamic_dlt/ops_ckpts".format(user_name)
 
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC DROP TABLE IF EXISTS ops_customer;
-# MAGIC DROP TABLE IF EXISTS ops_store;
-# MAGIC DROP TABLE IF EXISTS ops_store_address;
-# MAGIC DROP TABLE IF EXISTS ops_customer_address; 
-# MAGIC DROP TABLE IF EXISTS ops_order;
-# MAGIC DROP TABLE IF EXISTS ops_product;
-# MAGIC DROP TABLE IF EXISTS ops_orders_main;
-# MAGIC DROP TABLE IF EXISTS ops_quarantine_orders;
-# MAGIC DROP TABLE IF EXISTS ops_order_line_items;
-# MAGIC DROP TABLE IF EXISTS ops_customer_notifications; 
-
-# COMMAND ----------
-
-# if we rerun this entire notebook then we need to reset all of our metadata 
-# go to "Continue Generating Data" if you want to pick up where you left off 
-# dbutils.fs.rm(raw_files, True)
-dbutils.fs.rm(raw_ckpts, True)
-dbutils.fs.rm(raw_schemas, True)
-dbutils.fs.rm(ops_ckpts, True)
-
-
-# dbutils.fs.mkdirs(raw_files.replace('/dbfs', ''))
-dbutils.fs.mkdirs(raw_ckpts)
-dbutils.fs.mkdirs(raw_schemas)
-dbutils.fs.mkdirs(ops_ckpts)
+raw_files = "/Users/{}/retail_demo/raw/data".format(user_name)
+raw_ckpts = "/Users/{}/retail_demo/raw/raw_ckpts".format(user_name)
+raw_schemas = "/Users/{}/retail_demo/raw/raw_schemas".format(user_name)
+ops_ckpts = "/Users/{}/retail_demo/ops/ops_ckpts".format(user_name)
 
 # COMMAND ----------
 
@@ -427,37 +394,6 @@ def write_completed_order(microBatchDF, batchId):
   .foreachBatch(write_completed_order)
   .start()
 )
-
-
-
-#### Original 
-
-# ## ops_pickup_completed_orders 
-# # - route completed pickup orders to a table
-# (
-#   spark.readStream.option('ignoreChanges', True)
-#   .table("ops_orders_main")
-#   .filter(col("filled") == True)
-#   .filter(col("order_type") == "pickup")
-#   .withColumn("transaction_completed", lit(False))
-#   .writeStream
-#   .option("checkpointLocation", ops_ckpts+"/ops_pickup_completed_orders")
-#   .toTable('ops_pickup_completed_orders')
-# )
-
-
-# ## ops_delivery_completed_orders
-# # - route completed delivery orders to a table 
-# (
-#   spark.readStream.option('ignoreChanges', True)
-#   .table("ops_orders_main")
-#   .filter(col("filled") == True)
-#   .filter(col("order_type") == "delivery")
-#   .withColumn("transaction_completed", lit(False))
-#   .writeStream
-#   .option("checkpointLocation", ops_ckpts+"/ops_delivery_completed_orders")
-#   .toTable('ops_delivery_completed_orders')
-# )
 
 # COMMAND ----------
 
