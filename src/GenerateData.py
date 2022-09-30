@@ -2,13 +2,7 @@
 # MAGIC %md
 # MAGIC # Generate Data  
 # MAGIC 
-# MAGIC In this demo we will generate fake data using Faker to simulate point of sale data. Please note the tables with brief explainations.  
-# MAGIC - customer 
-# MAGIC - customer_address 
-# MAGIC - product 
-# MAGIC - order 
-# MAGIC - store
-# MAGIC - store_address
+# MAGIC In this demo we will generate fake data using Faker to simulate point of sale data, inventory, customer, and vendor data. 
 
 # COMMAND ----------
 
@@ -25,7 +19,7 @@ raw_files = "/dbfs/Users/{}/retail_demo/raw/data".format(user_name)
 spark_raw_files = raw_files.replace("/dbfs", "")
 raw_ckpts = "/Users/{}/retail_demo/raw/raw_ckpts".format(user_name)
 raw_schemas = "/Users/{}/retail_demo/raw/raw_schemas".format(user_name)
-ops_ckpts = "/Users/{}/retail_demo/ops/ops_ckpts".format(user_name)
+bronze_ckpts = "/Users/{}/retail_demo/bronze/bronze_ckpts".format(user_name)
 
 # COMMAND ----------
 
@@ -41,7 +35,7 @@ if dbutils.widgets.get("ResetSchema") == "Yes":
 dbutils.fs.mkdirs(raw_files.replace('/dbfs', ''))
 dbutils.fs.mkdirs(raw_ckpts)
 dbutils.fs.mkdirs(raw_schemas)
-dbutils.fs.mkdirs(ops_ckpts)
+dbutils.fs.mkdirs(bronze_ckpts)
 
 # COMMAND ----------
 
@@ -75,6 +69,7 @@ from lib.products import Products
 from lib.order import Order 
 from lib.data_domain import DataDomain 
 from lib.vendor import Vendor
+from lib.inventory import Inventory
 
 # COMMAND ----------
 
@@ -91,6 +86,7 @@ store_address = StoreAddress()
 products = Products(pdf)
 order = Order()
 vendor = Vendor()
+inventory = Inventory()
 data_domain = DataDomain()
 
 # COMMAND ----------
@@ -224,51 +220,41 @@ display(spark.read.json('{}/order/order_*.json'.format(spark_raw_files)))
 
 # COMMAND ----------
 
-# DBTITLE 1,Inventory - not implemented!
-# # for each customer 
-# dbutils.fs.mkdirs('Users/{}/retail_demo/raw/inventory'.format(user_name))
+# DBTITLE 1,Inventory
+dbutils.fs.mkdirs('{}/inventory'.format(spark_raw_files))
 
+products_df = products.get_products()
 
+# for each product in each store generate the inventory information 
+for i in range(0, len(products_df)):
+  pid = products_df['product_id'].iloc[i]
+  d = inventory.create_inventory_data(pid=pid, stores=data_domain.store_ids)
 
-# for cid in data_domain.customer_ids:
-#   # randomly determine the number of orders to give them and randomly select a store 
-#   for i in order_range: 
-#     sid = data_domain.select_random_store()
-#     d, a = order.create_order(cid, sid, products)
-#     filename = "{}/order/order_{}.json".format(raw_files, str(uuid.uuid4()))
-#     with open(filename, "w") as f:
-#       json.dump(d, f)
+  filename = "{}/inventory/inventory_{}.json".format(raw_files, str(uuid.uuid4()))
+  with open(filename, "w") as f:
+    json.dump(d, f)
 
-#     filename = "{}/order_actions/order_actions_{}.json".format(raw_files, str(uuid.uuid4()))
-#     with open(filename, "w") as f:
-#       json.dump(a, f)
-      
-# display(spark.read.json('Users/{}/retail_demo/raw/order/order_*.json'.format(user_name)))
+display(spark.read.json('{}/inventory/inventory_*.json'.format(spark_raw_files)))
 
 # COMMAND ----------
 
 # DBTITLE 1,Vendor
 dbutils.fs.mkdirs('{}/vendor'.format(spark_raw_files))
+num_stores = 5
 
 products_df = products.get_products()
 
+# for each product in each store generate the vendor information 
 for i in range(0, len(products_df)):
   pid = products_df['product_id'].iloc[i]
   vid = int(products_df['vendor_id'].iloc[i])
-  
-  for sid in data_domain.store_ids: 
-    
-    key, d = vendor.create_vendor_data(pid=pid, vid=vid, sid=sid)
+  d = vendor.create_vendor_data(pid=pid, vid=vid, stores=data_domain.store_ids[0:num_stores])
 
-    filename = "{}/vendor/vendor_{}.json".format(raw_files, key)
-    with open(filename, "w") as f:
-      json.dump(d, f)
+  filename = "{}/vendor/vendor_{}.json".format(raw_files, str(uuid.uuid4()))
+  with open(filename, "w") as f:
+    json.dump(d, f)
       
 display(spark.read.json('{}/vendor/vendor_*.json'.format(spark_raw_files)))
-
-# COMMAND ----------
-
-d
 
 # COMMAND ----------
 
@@ -277,37 +263,45 @@ d
 
 # COMMAND ----------
 
-# DBTITLE 1,Customer Address Updates
-def customer_address_update(customer_address, data_domain):
-  end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
-  customer_address_count = 2 
-  sleep_time = 2.5
-  
-  while datetime.datetime.utcnow() < end_time:
-    ## Update an Address
-    for i in range(0, customer_address_count):
-      customer_id = data_domain.select_random_customer()
-      d = customer_address.update_customer_address(customer_id)
-      filename = "{}/customer_address/customer_address_{}.json".format(raw_files, str(uuid.uuid4()))
-      with open(filename, "w") as f:
-        json.dump(d, f)
-
-    time.sleep(sleep_time)
+if dbutils.widgets.get("ResetSchema") == "No":
+  print("Loading Data")
+  data_domain.store_ids = [sid.store_id for sid in spark.read.json('{}/store/store_*.json'.format(spark_raw_files)).select("store_id").collect()]
+  data_domain.customer_ids = [cid.customer_id for cid in spark.read.json('{}/customer/customer_*.json'.format(spark_raw_files)).select("customer_id").collect()]
 
 # COMMAND ----------
 
-# execute thread
+# DBTITLE 1,Customer Address - Updates
+def customer_address_update(customer_address, data_domain):
+  try:
+    end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
+    customer_address_count = 2 
+    sleep_time = 2.5
+
+    while datetime.datetime.utcnow() < end_time:
+      ## Update an Address
+      for i in range(0, customer_address_count):
+        customer_id = data_domain.select_random_customer()
+        d = customer_address.update_customer_address(customer_id)
+        filename = "{}/customer_address/customer_address_{}.json".format(raw_files, str(uuid.uuid4()))
+        with open(filename, "w") as f:
+          json.dump(d, f)
+
+      time.sleep(sleep_time)
+  except err:
+    print(err)
+
+# COMMAND ----------
+
 ca = threading.Thread(target=customer_address_update, args=(customer_address, data_domain,))
 ca.start()
 
-
 # COMMAND ----------
 
-# DBTITLE 1,Customer Behavior - Order Creation
+# DBTITLE 1,Customer Orders - Create
 def create_orders(order, data_domain, products):
   end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
   order_count = 10 
-  sleep_time = 1
+  sleep_time = .5
   
   while datetime.datetime.utcnow() < end_time:
     ## Update an Address
@@ -327,10 +321,8 @@ def create_orders(order, data_domain, products):
 
 # COMMAND ----------
 
-# execute thread
 o = threading.Thread(target=create_orders, args=(order, data_domain, products,))
 o.start()
-
 
 # COMMAND ----------
 

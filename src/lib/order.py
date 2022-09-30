@@ -45,14 +45,14 @@ class Order():
         item['action'] = 'added'
         customer_actions.append(item)
         basket_items.append({k: item.get(k) for k in ['product_id', 'qty', 'total']})
-        # REMOVE
-        if random.random() > 0.98:
+        # REMOVE --- i > 1 helps us avoid the possiblity of an empty basket
+        if random.random() > 0.98 and i > 1: 
           _ = basket_items.pop() # remove basket item
           item['time'] = time.time()
           item['action'] = 'removed'
           customer_actions.append(item)
           # ADD again with new qty 
-          if random.random() >= 0.60:
+          if random.random() >= 0.60 and i > 1: 
             item['time'] = time.time()
             item['action'] = 'added'
             qty = random.randint(qty_min, qty_max)

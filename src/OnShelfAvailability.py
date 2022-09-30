@@ -17,17 +17,27 @@
 
 # COMMAND ----------
 
+dbutils.widgets.text("schema_name", "")
+
+# COMMAND ----------
+
 # raw files are published to a user specific directory 
 user_name = spark.sql("SELECT current_user()").collect()[0][0]
-raw_files = "/Users/{}/retail_demo/raw".format(user_name)
+raw_files = "/Users/{}/retail_demo/raw/data".format(user_name)
 
-# parameterize the notebook
-dbutils.widgets.text("schema_name", "")
 schema_name = dbutils.widgets.get("schema_name")
 
 # create and set default database
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
 spark.sql(f"USE {schema_name}")
+
+# COMMAND ----------
+
+34000*20*20 #13,600,000
+
+# COMMAND ----------
+
+len(dbutils.fs.ls('{}/inventory/'.format(raw_files)))
 
 # COMMAND ----------
 
