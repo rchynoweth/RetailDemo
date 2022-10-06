@@ -8,9 +8,14 @@ class Store():
   
   def __init__(self):
     self.fake = Faker()
+    self.store_ids = []
+    
+    
+  def select_random_store(self):
+    return self.store_ids[random.randint(0, len(self.store_ids)-1)]
     
   
-  def create_store(self):
+  def create(self):
     """
     Creates a store 
     """

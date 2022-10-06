@@ -45,7 +45,7 @@ def generate_tables(table):
     return (
       spark.readStream.format('cloudfiles')
         .option('cloudFiles.format', 'json')
-        .load('/Users/{}/retail_demo/raw/{}/{}_*.json'.format(user_name, table, table))
+        .load('/Users/{}/retail_demo/raw/data/{}/{}_*.json'.format(user_name, table, table))
         .withColumn('input_file', input_file_name())
         .withColumn("load_datetime", current_timestamp())
      )

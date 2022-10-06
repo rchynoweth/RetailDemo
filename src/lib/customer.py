@@ -8,9 +8,13 @@ class Customer():
   
   def __init__(self):
     self.fake = Faker()
+    self.customer_ids = []
+    
+  def select_random_customer(self):
+    return self.customer_ids[random.randint(0, len(self.customer_ids)-1)]
     
   
-  def create_customer(self):
+  def create(self):
     """
     Creates a customer 
     """

@@ -21,7 +21,6 @@ import mlflow
 import time
 import random
 import os 
-from PIL import Image
 
 # COMMAND ----------
 
@@ -238,19 +237,6 @@ df_client.createOrReplaceTempView("vw_experiment_data")
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC   select tags.store_id as store_id
-# MAGIC   , *
-# MAGIC   , concat(artifact_uri,'/prophet-model') as model_uri 
-# MAGIC 
-# MAGIC   from vw_experiment_data 
-# MAGIC 
-# MAGIC   where status='FINISHED' and tags.store_id = 'e9941c94-79c6-4569-9529-1a1f1b8f747b'
-# MAGIC 
-# MAGIC   order by start_time desc
-
-# COMMAND ----------
-
 store_id = 'e9941c94-79c6-4569-9529-1a1f1b8f747b'
   
 # select data 
@@ -272,92 +258,3 @@ model_df = spark.sql("""
 # COMMAND ----------
 
 display(model_df)
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# create dowload dir for images
-if os.path.exists("/tmp/"):
-  print("Deleting Download Directory...")
-  shutil.rmtree("/tmp")
-  os.makedirs("/tmp", exist_ok=False)
-
-selected_model_id = model_df.select("run_id").first()[0]
-print("Model ID = '{}'".format(selected_model_id))
-
-# COMMAND ----------
-
-# create dowload dir for images
-if os.path.exists("/tmp/"):
-  print("Deleting Download Directory...")
-  shutil.rmtree("/tmp")
-  os.makedirs("/tmp", exist_ok=False)
-
-# COMMAND ----------
-
-c.download_artifacts(selected_model_id, f"{store_id}_plot_components.png", "/tmp/")
-
-# COMMAND ----------
-
-c.download_artifacts(selected_model_id, f"{store_id}_plot.png", "/tmp/")
-
-# COMMAND ----------
-
-fig1 = Image.open(f"/tmp/{store_id}_plot.png")
-fig1.show()
-
-# COMMAND ----------
-
-fig1.close()
-
-# COMMAND ----------
-
-fig2 = Image.open(f"/tmp/{store_id}_plot_components.png")
-fig2.show()
-
-# COMMAND ----------
-
-fig2.close()

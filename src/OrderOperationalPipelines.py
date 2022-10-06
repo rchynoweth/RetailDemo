@@ -87,6 +87,8 @@ product_df = read_ingest_json_data('product')
 store_df = read_ingest_json_data('store')
 store_address_df = read_ingest_json_data('store_address')
 order_actions_df = read_ingest_json_data('order_actions')
+vendor_df = read_ingest_json_data('vendor')
+inventory_df = read_ingest_json_data('inventory')
 
 # COMMAND ----------
 
@@ -113,6 +115,8 @@ write_ingest_json_data(product_df, 'ops_product')
 write_ingest_json_data(store_df, 'ops_store')
 write_ingest_json_data(store_address_df, 'ops_store_address')
 write_ingest_json_data(order_actions_df, 'ops_order_actions')
+write_ingest_json_data(inventory_df, 'ops_inventory')
+write_ingest_json_data(vendor_df, 'ops_vendor')
 
 # COMMAND ----------
 

@@ -11,7 +11,7 @@ class StoreAddress():
     
   
 
-  def create_store_address(self, sid):
+  def create(self, sid):
     """
     When given a store id, this will generate address information for the store 
     """

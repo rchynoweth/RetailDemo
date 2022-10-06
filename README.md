@@ -3,11 +3,12 @@
 
 ### Features
 Current: 
-- Simulates, ingests, and processes transactional data 
+- Simulates, ingests, and processes transactional data (stores, customers, orders, products, vendor, inventory etc)
 - Process and fulfills orders 
 - Notifies customers at multiple touchpoints 
 - Tracks cart creation i.e. viewing/adding/removing items from cart   
-
+- Store Forecasting 
+- On Shelf Availability and Out of Stock Analysis 
 
 Future: 
 - Substitutions 
@@ -19,17 +20,6 @@ Future:
 
 <img src="https://racadlsgen2.blob.core.windows.net/public/RCGDemosDiagrams.png" width = 1200/>
 
-
-### Running the Repo
-1. Run GenerateData to populate the initial dataset  
-  - If you do not want to recreate the initial dataset and start where you left off then just run the last two commands to continue generating order data 
-  - This notebook behaves as the 'customer'   
-1. Create and Run the DLT Pipeline to populate analytics datasets
-1. Run the OrderOperationalPipeline to run the operations (i.e. order creation and fulfillment )
-
-
-### Resources:
-- [Programmatically Manage and Create Multiple Live Tables](https://docs.databricks.com/workflows/delta-live-tables/delta-live-tables-cookbook.html#programmatically-manage-and-create-multiple-live-tables)
 
 
 ### DLT Configuration

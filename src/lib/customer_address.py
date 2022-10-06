@@ -11,7 +11,7 @@ class CustomerAddress():
     self.fake = Faker()
     
   
-  def create_customer_address(self, cid):
+  def create(self, cid):
     """
     When given a customer id, this will generate address information for the customer 
     """
@@ -31,7 +31,7 @@ class CustomerAddress():
   
   
   
-  def update_customer_address(self, cid):
+  def update(self, cid):
     """
     When given a customer id, this will generate address information for the customer 
     """

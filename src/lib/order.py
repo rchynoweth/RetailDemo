@@ -16,7 +16,7 @@ class Order():
   
   
   
-  def create_order(self, cid, sid, products, order_source=None, order_type=None, product_min=2, product_max=20, qty_min=1, qty_max=10):
+  def create(self, cid, sid, products, order_source=None, order_type=None, product_min=2, product_max=20, qty_min=1, qty_max=10):
     """
     Produces a random set of products to be used in an orer
     

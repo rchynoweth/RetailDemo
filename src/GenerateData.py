@@ -39,10 +39,6 @@ dbutils.fs.mkdirs(bronze_ckpts)
 
 # COMMAND ----------
 
-dbutils.fs.ls("/Users/{}/retail_demo/".format(user_name)) # should have 2 dirs 
-
-# COMMAND ----------
-
 import subprocess 
 
 def pip_install(name):
@@ -60,16 +56,7 @@ import random
 import datetime 
 import pandas as pd
 import threading
-
-from lib.customer import Customer 
-from lib.customer_address import CustomerAddress
-from lib.store import Store
-from lib.store_address import StoreAddress 
-from lib.products import Products
-from lib.order import Order 
-from lib.data_domain import DataDomain 
-from lib.vendor import Vendor
-from lib.inventory import Inventory
+from lib import * # python imports 
 
 # COMMAND ----------
 
@@ -79,15 +66,14 @@ pdf['product_id'] = pdf['ImgId'][:]
 del pdf['ImgId']
 
 
-customer = Customer()
-customer_address = CustomerAddress()
-store = Store()
-store_address = StoreAddress()
-products = Products(pdf)
-order = Order()
-vendor = Vendor()
-inventory = Inventory()
-data_domain = DataDomain()
+customer = customer.Customer()
+customer_address = customer_address.CustomerAddress()
+store = store.Store()
+store_address = store_address.StoreAddress()
+products = products.Products(pdf)
+order = order.Order()
+vendor = vendor.Vendor()
+inventory = inventory.Inventory()
 
 # COMMAND ----------
 
@@ -96,67 +82,46 @@ data_domain = DataDomain()
 
 # COMMAND ----------
 
+def generate_base_data(dataset_obj, dataset_name, n_range):
+  dbutils.fs.mkdirs('{}/{}'.format(spark_raw_files, dataset_name))
+  
+  for i in n_range:
+    d = {}
+    if dataset_name in ['store', 'customer']:
+      d = dataset_obj.create()
+    else :
+      d = dataset_obj.create(i)
+      
+
+    with open("{}/{}/{}_{}.json".format(raw_files, dataset_name, dataset_name, str(uuid.uuid4())), "w") as f:
+      json.dump(d, f)
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Customer and Order Data
 
 # COMMAND ----------
 
-# DBTITLE 1,Customers
-dbutils.fs.mkdirs('{}/customer'.format(spark_raw_files))
-
-for i in range(0, num_customers):
-  d = customer.create_customer()
-  data_domain.add_customer(d.get('customer_id'))
-  
-  with open("{}/customer/customer_{}.json".format(raw_files, str(uuid.uuid4())), "w") as f:
-    json.dump(d, f)
-    
-display(spark.read.json('{}/customer/customer_*.json'.format(spark_raw_files)))
+# DBTITLE 1,Base Data
+# customers
+generate_base_data(customer, 'customer', range(0,num_customers))
+# stores
+generate_base_data(store, 'store', range(0, num_stores))
+# customer_address
+generate_base_data(customer_address, 'customer_address', customer.customer_ids)
+# store_address
+generate_base_data(store_address, 'store_address', store.store_ids)
 
 # COMMAND ----------
 
-# DBTITLE 1,Stores
-dbutils.fs.mkdirs('{}/store'.format(spark_raw_files))
-for i in range(0, num_stores):
-  d = store.create_store()
-  data_domain.add_store(d.get('store_id'))
-
-  
-  with open("{}/store/store_{}.json".format(raw_files, str(uuid.uuid4())), "w") as f:
-    json.dump(d, f)
-
-
-display(spark.read.json('{}/store/store_*.json'.format(spark_raw_files)))
-
-# COMMAND ----------
-
-# DBTITLE 1,Customer Addresses
-dbutils.fs.mkdirs('{}/customer_address'.format(spark_raw_files))
-for cid in data_domain.customer_ids:
-  d = customer_address.create_customer_address(cid)
-  
-  with open("{}/customer_address/customer_address_{}.json".format(raw_files, str(uuid.uuid4())), "w") as f:
-    json.dump(d, f)
-    
-display(spark.read.json('{}/customer_address/customer_address_*.json'.format(spark_raw_files)))
-
-# COMMAND ----------
-
-# DBTITLE 1,Store Addresses
-dbutils.fs.mkdirs('{}/store_address'.format(spark_raw_files))
-for sid in data_domain.store_ids:
-  d = store_address.create_store_address(sid)
-  
-  with open("{}/store_address/store_address_{}.json".format(raw_files, str(uuid.uuid4())), "w") as f:
-    json.dump(d, f)
-    
-
-display(spark.read.json('{}/store_address/store_address_*.json'.format(spark_raw_files)))
+customer.customer_ids = [cid.customer_id for cid in spark.read.json('{}/customer/customer_*.json'.format(spark_raw_files)).select("customer_id").distinct().collect()]
+store.store_ids = [sid.store_id for sid in spark.read.json('{}/store/store_*.json'.format(spark_raw_files)).select("store_id").distinct().collect()]
 
 # COMMAND ----------
 
 # DBTITLE 1,Products
-dbutils.fs.mkdirs('{}/product'.format(spark_raw_files))
+dbutils.fs.mkdirs('{}/products'.format(spark_raw_files))
 
 d = products.get_products_dict()
 
@@ -172,11 +137,11 @@ dbutils.fs.mkdirs('{}/order'.format(spark_raw_files))
 dbutils.fs.mkdirs('{}/order_actions'.format(spark_raw_files))
 order_range = range(10,100)
 
-for cid in data_domain.customer_ids:
+for cid in customer.customer_ids:
   # randomly determine the number of orders to give them and randomly select a store 
   for i in order_range: 
-    sid = data_domain.select_random_store()
-    d, a = order.create_order(cid, sid, products)
+    sid = store.select_random_store()
+    d, a = order.create(cid, sid, products)
     filename = "{}/order/order_{}.json".format(raw_files, str(uuid.uuid4()))
     with open(filename, "w") as f:
       json.dump(d, f)
@@ -228,13 +193,14 @@ products_df = products.get_products()
 # for each product in each store generate the inventory information 
 for i in range(0, len(products_df)):
   pid = products_df['product_id'].iloc[i]
-  d = inventory.create_inventory_data(pid=pid, stores=data_domain.store_ids)
+  d = inventory.create(pid=pid, stores=store.store_ids)
 
   filename = "{}/inventory/inventory_{}.json".format(raw_files, str(uuid.uuid4()))
   with open(filename, "w") as f:
     json.dump(d, f)
 
-display(spark.read.json('{}/inventory/inventory_*.json'.format(spark_raw_files)))
+df = (spark.read.json('{}/inventory/inventory_*.json'.format(spark_raw_files)))
+display(df)
 
 # COMMAND ----------
 
@@ -248,7 +214,7 @@ products_df = products.get_products()
 for i in range(0, len(products_df)):
   pid = products_df['product_id'].iloc[i]
   vid = int(products_df['vendor_id'].iloc[i])
-  d = vendor.create_vendor_data(pid=pid, vid=vid, stores=data_domain.store_ids[0:num_stores])
+  d = vendor.create_vendor_data(pid=pid, vid=vid, stores=store.store_ids[0:num_stores])
 
   filename = "{}/vendor/vendor_{}.json".format(raw_files, str(uuid.uuid4()))
   with open(filename, "w") as f:
@@ -263,15 +229,8 @@ display(spark.read.json('{}/vendor/vendor_*.json'.format(spark_raw_files)))
 
 # COMMAND ----------
 
-if dbutils.widgets.get("ResetSchema") == "No":
-  print("Loading Data")
-  data_domain.store_ids = [sid.store_id for sid in spark.read.json('{}/store/store_*.json'.format(spark_raw_files)).select("store_id").collect()]
-  data_domain.customer_ids = [cid.customer_id for cid in spark.read.json('{}/customer/customer_*.json'.format(spark_raw_files)).select("customer_id").collect()]
-
-# COMMAND ----------
-
 # DBTITLE 1,Customer Address - Updates
-def customer_address_update(customer_address, data_domain):
+def customer_address_update(customer_address, customer):
   try:
     end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
     customer_address_count = 2 
@@ -280,7 +239,7 @@ def customer_address_update(customer_address, data_domain):
     while datetime.datetime.utcnow() < end_time:
       ## Update an Address
       for i in range(0, customer_address_count):
-        customer_id = data_domain.select_random_customer()
+        customer_id = customer.select_random_customer()
         d = customer_address.update_customer_address(customer_id)
         filename = "{}/customer_address/customer_address_{}.json".format(raw_files, str(uuid.uuid4()))
         with open(filename, "w") as f:
@@ -292,13 +251,13 @@ def customer_address_update(customer_address, data_domain):
 
 # COMMAND ----------
 
-ca = threading.Thread(target=customer_address_update, args=(customer_address, data_domain,))
+ca = threading.Thread(target=customer_address_update, args=(customer_address, customer,))
 ca.start()
 
 # COMMAND ----------
 
 # DBTITLE 1,Customer Orders - Create
-def create_orders(order, data_domain, products):
+def create_orders(order, customer, store, products):
   end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=60)
   order_count = 10 
   sleep_time = .5
@@ -306,8 +265,8 @@ def create_orders(order, data_domain, products):
   while datetime.datetime.utcnow() < end_time:
     ## Update an Address
     for i in range(0, order_count):
-      customer_id = data_domain.select_random_customer()
-      store_id = data_domain.select_random_store()
+      customer_id = customer.select_random_customer()
+      store_id = store.select_random_store()
       d, a = order.create_order(customer_id, store_id, products)
       filename = "{}/order/order_{}.json".format(raw_files, str(uuid.uuid4()))
       with open(filename, "w") as f:
@@ -321,7 +280,7 @@ def create_orders(order, data_domain, products):
 
 # COMMAND ----------
 
-o = threading.Thread(target=create_orders, args=(order, data_domain, products,))
+o = threading.Thread(target=create_orders, args=(order, customer, store, products,))
 o.start()
 
 # COMMAND ----------
