@@ -60,7 +60,7 @@ from lib import * # python imports
 
 # COMMAND ----------
 
-url = 'https://raw.githubusercontent.com/rchynoweth/RetailDemo/main/src/train.csv'
+url = 'https://github.com/rchynoweth/RetailDemo/blob/7078539fc4354692723796833b5a5b7846623af2/src/products.csv'
 pdf = pd.read_csv(url)
 pdf['product_id'] = pdf['ImgId'][:]
 del pdf['ImgId']

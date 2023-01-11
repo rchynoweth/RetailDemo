@@ -168,21 +168,21 @@ def monthly_sales():
 # This creates append only tables for our bronze sources
 # we can do further modeling in silver/gold layers 
 ###
-def generate_scd_tables(table, key, seq_col, scd_type):
+def generate_scd_tables(table, keys, seq_col, scd_type):
   dlt.create_streaming_live_table("{}_scd{}".format(table, scd_type))
   dlt.apply_changes(
       target = "{}_scd{}".format(table, scd_type),
       source = table, 
-      keys = [key], 
+      keys = keys, 
       sequence_by = col(seq_col),
       stored_as_scd_type = scd_type
     )
 
 # COMMAND ----------
 
-generate_scd_tables('store_address', 'address_id', 'created_date', 1)
-generate_scd_tables('store_address', 'address_id', 'created_date', 2)
-generate_scd_tables('customer_address', 'address_id', 'created_date', 1)
-generate_scd_tables('customer_address', 'address_id', 'created_date', 2)
-generate_scd_tables('order_actions', 'order_id', 'datetime', 1)
-generate_scd_tables('order_actions', 'order_id', 'datetime', 2)
+generate_scd_tables('store_address', ['address_id'], 'created_date', 1)
+generate_scd_tables('store_address', ['address_id'], 'created_date', 2)
+generate_scd_tables('customer_address', ['address_id'], 'created_date', 1)
+generate_scd_tables('customer_address', ['address_id'], 'created_date', 2)
+generate_scd_tables('order_actions', ['order_id'], 'datetime', 1)
+generate_scd_tables('order_actions', ['order_id'], 'datetime', 2)
